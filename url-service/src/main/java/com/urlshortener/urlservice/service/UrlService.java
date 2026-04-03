@@ -5,6 +5,7 @@ import com.urlshortener.urlservice.dto.ShortenResponse;
 import com.urlshortener.urlservice.model.UrlMapping;
 import com.urlshortener.urlservice.repository.UrlMappingRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;  // ← CORRECT
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -21,8 +22,10 @@ public class UrlService {
     private final UrlMappingRepository urlMappingRepository;
     private final StringRedisTemplate redisTemplate;
 
-    private static final String BASE_URL =
-            "http://urlshortener-alb-1372942651.ap-south-1.elb.amazonaws.com/";
+
+    @Value("${app.base-url:http://localhost:8080/}")
+    private String baseUrl;
+
     private static final String REDIS_PREFIX = "slug:";
 
     public ShortenResponse shorten(ShortenRequest request){
@@ -46,9 +49,9 @@ public class UrlService {
                 24, TimeUnit.HOURS
         );
 
-        log.info("Created short URL: {}{}",BASE_URL,slug);
+        log.info("Created short URL: {}{}",baseUrl,slug);
 
-        return new ShortenResponse(slug,BASE_URL+slug,
+        return new ShortenResponse(slug,baseUrl+slug,
                 request.getOriginalUrl());
     }
 
