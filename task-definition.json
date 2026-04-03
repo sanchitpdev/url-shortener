@@ -1,0 +1,107 @@
+{
+  "family": "urlshortener-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "1024",
+  "memory": "2048",
+  "executionRoleArn": "arn:aws:iam::015060878931:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "postgres",
+      "image": "postgres:16-alpine",
+      "essential": true,
+      "environment": [
+        {"name": "POSTGRES_DB", "value": "urlshortener"},
+        {"name": "POSTGRES_USER", "value": "postgres"},
+        {"name": "POSTGRES_PASSWORD", "value": "postgres"}
+      ],
+      "portMappings": [
+        {"containerPort": 5432, "protocol": "tcp"}
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/urlshortener",
+          "awslogs-region": "ap-south-1",
+          "awslogs-stream-prefix": "postgres"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD-SHELL", "pg_isready -U postgres"],
+        "interval": 10,
+        "timeout": 5,
+        "retries": 5,
+        "startPeriod": 30
+      }
+    },
+    {
+      "name": "redis",
+      "image": "redis:7-alpine",
+      "essential": true,
+      "portMappings": [
+        {"containerPort": 6379, "protocol": "tcp"}
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/urlshortener",
+          "awslogs-region": "ap-south-1",
+          "awslogs-stream-prefix": "redis"
+        }
+      },
+      "healthCheck": {
+        "command": ["CMD", "redis-cli", "ping"],
+        "interval": 10,
+        "timeout": 5,
+        "retries": 5,
+        "startPeriod": 30
+      }
+    },
+    {
+      "name": "url-service",
+      "image": "015060878931.dkr.ecr.ap-south-1.amazonaws.com/url-shortener:latest",
+      "essential": true,
+      "dependsOn": [
+        {"containerName": "postgres", "condition": "HEALTHY"},
+        {"containerName": "redis", "condition": "HEALTHY"}
+      ],
+      "portMappings": [
+        {"containerPort": 8080, "protocol": "tcp"}
+      ],
+      "environment": [
+        {
+          "name": "SPRING_DATASOURCE_URL",
+          "value": "jdbc:postgresql://localhost:5432/urlshortener"
+        },
+        {"name": "SPRING_DATASOURCE_USERNAME", "value": "postgres"},
+        {"name": "SPRING_DATASOURCE_PASSWORD", "value": "postgres"},
+        {"name": "SPRING_DATA_REDIS_HOST", "value": "localhost"},
+        {"name": "SPRING_DATA_REDIS_PORT", "value": "6379"},
+        {
+          "name": "SPRING_JPA_DATABASE_PLATFORM",
+          "value": "org.hibernate.dialect.PostgreSQLDialect"
+        },
+        {"name": "SPRING_JPA_HIBERNATE_DDL_AUTO", "value": "update"}
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/urlshortener",
+          "awslogs-region": "ap-south-1",
+          "awslogs-stream-prefix": "url-service"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "wget -q -O /dev/null http://localhost:8080/actuator/health || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 5,
+        "retries": 3,
+        "startPeriod": 120
+      },
+      "essential": true
+    }
+  ]
+}

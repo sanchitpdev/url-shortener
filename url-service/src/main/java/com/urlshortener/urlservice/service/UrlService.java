@@ -21,7 +21,8 @@ public class UrlService {
     private final UrlMappingRepository urlMappingRepository;
     private final StringRedisTemplate redisTemplate;
 
-    private static final String BASE_URL = "http://localhost:8080/";
+    private static final String BASE_URL =
+            "http://urlshortener-alb-1372942651.ap-south-1.elb.amazonaws.com/";
     private static final String REDIS_PREFIX = "slug:";
 
     public ShortenResponse shorten(ShortenRequest request){
