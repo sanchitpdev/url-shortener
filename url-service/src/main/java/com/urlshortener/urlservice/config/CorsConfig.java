@@ -14,7 +14,7 @@ public class CorsConfig {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
                 registry.addMapping("/**")
-                        .allowedOrigins("*")   // Replace * with your Vercel URL in production
+                        .allowedOrigins("https://url-shortener-version1.vercel.app")
                         .allowedMethods("GET", "POST", "OPTIONS")
                         .allowedHeaders("*")
                         .maxAge(3600);
