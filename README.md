@@ -14,7 +14,7 @@
 
 <br/>
 
-**A production-ready URL shortener built to demonstrate real-world backend engineering.**  
+**A production-ready URL shortener built to demonstrate real-world backend engineering.**
 Redis cache-aside · PostgreSQL persistence · AWS ECS Fargate · GitHub Actions CI/CD · Live frontend on Vercel
 
 <br/>
@@ -80,9 +80,9 @@ Client sends POST /api/shorten
 Client visits GET /:slug
         │
         ▼
-   Check Redis ──► HIT  ──►  302 Redirect (sub-millisecond ⚡)
+   Check Redis ──► HIT  ──►  302 Redirect (served from cache, no DB hit)
         │
-        └──► MISS  ──►  Query PostgreSQL  ──►  Re-cache in Redis  ──►  302 Redirect
+        └──► MISS ──►  Query PostgreSQL ──►  302 Redirect
 ```
 
 ---
@@ -91,18 +91,18 @@ Client visits GET /:slug
 
 | Layer | Technology | Why |
 |:---:|:---:|:---|
-| 🟠 Language | Java 21 | LTS, modern features (records, sealed classes) |
+| 🟠 Language | Java 21 | LTS, modern features (records, pattern matching) |
 | 🍃 Framework | Spring Boot 3.x | Industry-standard, production-ready backend |
 | 🐘 Database | PostgreSQL 16 | Reliable relational storage for slug mappings |
-| 🔴 Cache | Redis 7 | Sub-millisecond lookups via cache-aside pattern |
+| 🔴 Cache | Redis 7 | In-memory cache-aside — hot slugs resolve without a DB round-trip |
 | 🐳 Containers | Docker + Compose | Reproducible local and production environments |
 | ⚙️ CI/CD | GitHub Actions | Automated test → build → scan → deploy on every push |
 | 📦 Registry | AWS ECR | Private Docker image storage |
 | ☁️ Hosting | AWS ECS Fargate | Serverless container deployment |
 | ⚖️ Load Balancer | AWS ALB | Single public URL, health checks, traffic routing |
-| 🧪 Testing | JUnit 5 + Mockito | Fast, isolated unit tests |
+| 🧪 Testing | JUnit 5 + Mockito | Isolated unit tests for the service layer |
 | 🔒 Security | Trivy | CVE scanning on every image before deployment |
-| 🎨 Frontend | HTML + CSS + JS | Zero-dependency UI, deployed on Vercel |
+| 🎨 Frontend | HTML + CSS + JS | Zero-dependency UI on Vercel ([separate repo](https://github.com/sanchitpdev/url-shortener-frontend)) |
 
 ---
 
@@ -127,7 +127,7 @@ Content-Type: application/json
 | Field | Type | Required | Description |
 |---|---|:---:|---|
 | `originalUrl` | `string` | ✅ | The long URL to shorten |
-| `expiryDays` | `integer` | ❌ | Days until the link expires (omit for permanent) |
+| `expiryDays` | `integer` | ❌ | Days until the link expires (stored on the record; omit for no expiry) |
 
 **Response `200 OK`:**
 
@@ -215,7 +215,7 @@ Push to main
 ╚══════════════╝
 ```
 
-> 💡 Tests are the gate — nothing broken ever reaches production.
+> 💡 Tests run as the first stage; build and deploy only proceed if they pass.
 
 ---
 
@@ -315,41 +315,42 @@ VPC (10.0.0.0/16)
 <details>
 <summary><b>🐳 Multi-Stage Docker Build</b></summary>
 <br/>
-Stage 1 compiles the application using a full JDK (~400 MB). Stage 2 runs the JAR using a lean JRE (~180 MB). The final image is significantly smaller, faster to pull, and has a smaller attack surface.
+Stage 1 compiles the application using a full JDK on Alpine. Stage 2 runs the JAR on a lean Alpine JRE. The final image is smaller, faster to pull, and has a reduced attack surface.
 </details>
 
 <details>
 <summary><b>🔴 Cache-Aside Pattern with Redis</b></summary>
 <br/>
-Every redirect checks Redis first. Only on a cache miss does it fall back to PostgreSQL — and then re-caches the result for the next 24 hours. This keeps redirect latency low under high load without requiring complex cache invalidation logic.
+On creation, each slug → URL mapping is written to PostgreSQL and cached in Redis with a 24-hour TTL. Every redirect checks Redis first; on a hit, the redirect is served entirely from cache with no database round-trip. On a miss, it falls back to PostgreSQL. (Re-warming the cache on a miss is a planned improvement — see roadmap.)
 </details>
 
 <details>
 <summary><b>✅ Health-Check-Gated Startup</b></summary>
 <br/>
-Docker Compose is configured so <code>url-service</code> depends on both Postgres and Redis with explicit health checks. The app container only starts once both dependencies are confirmed healthy — eliminating "connection refused" errors during startup.
+Docker Compose makes <code>url-service</code> depend on both Postgres and Redis with explicit health checks, so the app container only starts once both dependencies report healthy — eliminating "connection refused" errors during startup. The same dependency gating is mirrored in the ECS task definition.
 </details>
 
 <details>
 <summary><b>🔒 Trivy Vulnerability Scanning</b></summary>
 <br/>
-Every Docker image is scanned for known CVEs before being pushed to ECR. HIGH and CRITICAL findings are surfaced in the pipeline output. Vulnerable images never reach production.
+Every Docker image is scanned for known CVEs in the pipeline before being pushed to ECR. HIGH and CRITICAL findings are surfaced in the build output.
 </details>
 
 <details>
-<summary><b>⏳ Slug Expiry Support</b></summary>
+<summary><b>⏳ Slug Expiry (stored)</b></summary>
 <br/>
-The <code>UrlMapping</code> entity stores an optional <code>expiresAt</code> timestamp, enabling time-limited short links at the API level. Expiry is set per-request via the optional <code>expiryDays</code> field.
+The <code>UrlMapping</code> entity stores an optional <code>expiresAt</code> timestamp, set per request via the optional <code>expiryDays</code> field. Enforcing expiry on redirect (rejecting expired slugs) and cleaning them up is on the roadmap.
 </details>
 
 ---
 
 ## 🗺️ What's Next
 
-- [ ] 📊 Analytics microservice — track click counts and referrers per slug
-- [ ] 🗄️ Move to RDS + ElastiCache — data persists across ECS task replacements
-- [ ] 🔐 HTTPS via ACM certificate on the load balancer
-- [ ] 🧹 Background job to clean up expired slugs from PostgreSQL
+- [ ] ♻️ Re-cache on read miss so a popular-but-evicted slug warms Redis again
+- [ ] ⛔ Enforce `expiresAt` on redirect + a cleanup job for expired slugs
+- [ ] 📊 Analytics — track click counts and referrers per slug
+- [ ] 🗄️ Move to managed RDS + ElastiCache so data survives task replacement
+- [ ] 🔐 HTTPS via an ACM certificate on the load balancer
 - [ ] 🚦 Rate limiting on `POST /api/shorten` to prevent abuse
 
 ---
