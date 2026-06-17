@@ -1,6 +1,8 @@
 <div align="center">
 
-<img src="https://readme-typing-svg.demolab.com?font=JetBrains+Mono&weight=700&size=32&pause=1000&color=00D4AA&center=true&vCenter=true&width=600&lines=🔗+URL+Shortener;Production-Grade+Backend;Spring+Boot+%2B+Redis+%2B+AWS" alt="Typing SVG" />
+# 🔗 URL Shortener
+
+### Production-Grade Backend · Spring Boot + Redis + AWS
 
 <br/>
 
